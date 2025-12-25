@@ -1,0 +1,24 @@
+.control-panel {
+    display: flex;
+    gap: 12px;
+}
+
+.trigger-btn {
+    font-size: 13px;
+}
+
+.control-panel .btn {
+    min-width: 140px;
+}
+
+@media (max-width: 768px) {
+    .control-panel {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .control-panel .btn {
+        min-width: auto;
+        flex: 1;
+    }
+}
