@@ -1,12 +1,13 @@
 """
 Base agent class for all AI agents
+Uses AWS Bedrock for LLM inference
 """
-from abc import ABC, abstractmethod
-from typing import Optional
 import json
 import re
+import boto3
+from abc import ABC, abstractmethod
+from typing import Optional
 from datetime import datetime
-from openai import AsyncOpenAI
 from config.settings import settings
 from data.data_models import MarketData, DebateMessage
 
@@ -17,8 +18,13 @@ class BaseAgent(ABC):
     def __init__(self, name: str, emoji: str, prompt_file: str):
         self.name = name
         self.emoji = emoji
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        self.model = "gpt-4o-mini"
+        self.bedrock_client = boto3.client(
+            'bedrock-runtime',
+            region_name=settings.aws_region,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key
+        )
+        self.model_id = settings.bedrock_model_id
         self.system_prompt = self._load_prompt(prompt_file)
         self.message_history = []
         
@@ -89,19 +95,34 @@ ORDER BOOK DEPTH:
         return "\n".join(lines)
     
     async def _call_llm(self, user_message: str) -> str:
-        """Make LLM API call"""
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": self.system_prompt},
-                *self.message_history,
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0.7,
-            max_tokens=1000
+        """Make LLM API call via AWS Bedrock"""
+        
+        # Build messages array
+        messages = [
+            *self.message_history,
+            {"role": "user", "content": user_message}
+        ]
+        
+        # Prepare the request body for Claude
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1000,
+            "system": self.system_prompt,
+            "messages": messages,
+            "temperature": 0.7
+        })
+        
+        # Invoke Bedrock
+        response = self.bedrock_client.invoke_model(
+            modelId=self.model_id,
+            body=body,
+            contentType="application/json",
+            accept="application/json"
         )
         
-        assistant_message = response.choices[0].message.content
+        # Parse response
+        response_body = json.loads(response['body'].read())
+        assistant_message = response_body['content'][0]['text']
         
         # Add to history for context
         self.message_history.append({"role": "user", "content": user_message})

@@ -11,14 +11,17 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
     
+    # AWS Bedrock
+    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "")
+    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+    bedrock_model_id: str = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
+    
     # WEEX API
     weex_api_key: str = os.getenv("WEEX_API_KEY", "")
     weex_api_secret: str = os.getenv("WEEX_API_SECRET", "")
     weex_passphrase: str = os.getenv("WEEX_PASSPHRASE", "")
     weex_base_url: str = os.getenv("WEEX_BASE_URL", "https://api-contract.weex.com")
-    
-    # OpenAI
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     
     # Trading Parameters
     max_leverage: int = int(os.getenv("MAX_LEVERAGE", "20"))
