@@ -17,6 +17,9 @@
     backdrop-filter: blur(20px);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
+    position: relative;
+    z-index: 1000;
+    overflow: visible;
 }
 
 .header-left {
