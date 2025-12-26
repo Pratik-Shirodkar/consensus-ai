@@ -1,11 +1,28 @@
+import { useState } from 'react'
 import CommitteeRoom from './CommitteeRoom'
 import TradingChart from './TradingChart'
 import StatusBar from './StatusBar'
 import ControlPanel from './ControlPanel'
+import SymbolSelector from './SymbolSelector'
+import DemoToggle from './DemoToggle'
+import TradeHistory from './TradeHistory'
+import PortfolioStats from './PortfolioStats'
 import './Dashboard.css'
 
-function Dashboard({ isConnected, messages, status, onStart, onStop, onTrigger }) {
+function Dashboard({
+    isConnected,
+    messages,
+    status,
+    onStart,
+    onStop,
+    onTrigger,
+    currentSymbol,
+    onSymbolChange,
+    demoMode,
+    onDemoToggle
+}) {
     const isRunning = status?.status === 'running'
+    const [activeTab, setActiveTab] = useState('debate') // debate, trades, stats
 
     return (
         <div className="dashboard">
@@ -19,8 +36,9 @@ function Dashboard({ isConnected, messages, status, onStart, onStop, onTrigger }
                     <span className="tagline">Multi-Agent Investment Committee</span>
                 </div>
                 <div className="header-right">
+                    <DemoToggle demoMode={demoMode} onToggle={onDemoToggle} />
                     <StatusIndicator connected={isConnected} running={isRunning} />
-                    <span className="symbol-badge">BTC/USDT</span>
+                    <SymbolSelector currentSymbol={currentSymbol} onSymbolChange={onSymbolChange} />
                 </div>
             </header>
 
@@ -30,18 +48,51 @@ function Dashboard({ isConnected, messages, status, onStart, onStop, onTrigger }
                 <section className="panel chart-panel glass">
                     <div className="panel-header">
                         <h2>📈 Market View</h2>
-                        <div className="panel-badge">Live</div>
+                        <div className="panel-badges">
+                            <div className="panel-badge">Live</div>
+                            {demoMode && <div className="panel-badge demo">Demo</div>}
+                        </div>
                     </div>
-                    <TradingChart />
+                    <TradingChart symbol={currentSymbol} />
                 </section>
 
-                {/* Right Panel - Committee Room */}
-                <section className="panel committee-panel glass">
-                    <div className="panel-header">
-                        <h2>🏛️ Committee Room</h2>
-                        <div className="message-count">{messages.length} messages</div>
+                {/* Right Panel - Tabbed Content */}
+                <section className="panel right-panel glass">
+                    {/* Tabs */}
+                    <div className="panel-tabs">
+                        <button
+                            className={`tab-btn ${activeTab === 'debate' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('debate')}
+                        >
+                            🏛️ Committee
+                        </button>
+                        <button
+                            className={`tab-btn ${activeTab === 'trades' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('trades')}
+                        >
+                            📊 Trades
+                        </button>
+                        <button
+                            className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('stats')}
+                        >
+                            📈 Analytics
+                        </button>
                     </div>
-                    <CommitteeRoom messages={messages} />
+
+                    {/* Tab Content */}
+                    <div className="tab-content">
+                        {activeTab === 'debate' && (
+                            <>
+                                <div className="tab-header">
+                                    <span className="message-count">{messages.length} messages</span>
+                                </div>
+                                <CommitteeRoom messages={messages} />
+                            </>
+                        )}
+                        {activeTab === 'trades' && <TradeHistory />}
+                        {activeTab === 'stats' && <PortfolioStats />}
+                    </div>
                 </section>
             </main>
 

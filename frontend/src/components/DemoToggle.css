@@ -1,0 +1,90 @@
+.demo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    transition: all 0.3s;
+}
+
+.demo-toggle.demo {
+    background: rgba(124, 58, 237, 0.2);
+    border: 1px solid rgba(124, 58, 237, 0.4);
+}
+
+.demo-toggle.live {
+    background: rgba(255, 59, 48, 0.2);
+    border: 1px solid rgba(255, 59, 48, 0.4);
+}
+
+.demo-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.demo-icon {
+    font-size: 1rem;
+}
+
+.demo-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.demo-toggle.demo .demo-label {
+    color: #a78bfa;
+}
+
+.demo-toggle.live .demo-label {
+    color: #ff6b6b;
+}
+
+.toggle-button {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+}
+
+.toggle-slider {
+    display: block;
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.toggle-slider.on {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+}
+
+.toggle-slider.off {
+    background: linear-gradient(135deg, #ff3b30, #ff6b6b);
+}
+
+.toggle-knob {
+    position: absolute;
+    top: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s;
+}
+
+.toggle-slider.on .toggle-knob {
+    left: 20px;
+}
+
+.toggle-slider.off .toggle-knob {
+    left: 2px;
+}
+
+.toggle-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

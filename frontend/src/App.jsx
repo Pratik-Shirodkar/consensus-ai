@@ -6,6 +6,8 @@ function App() {
     const [messages, setMessages] = useState([])
     const [status, setStatus] = useState(null)
     const [ws, setWs] = useState(null)
+    const [currentSymbol, setCurrentSymbol] = useState('cmt_btcusdt')
+    const [demoMode, setDemoMode] = useState(true)
 
     // Connect to WebSocket
     useEffect(() => {
@@ -33,6 +35,9 @@ function App() {
                     setMessages(prev => [...prev, data])
                 } else if (data.type === 'status_update') {
                     setStatus(data)
+                } else if (data.type === 'trade_executed') {
+                    // Handle trade notifications
+                    console.log('Trade executed:', data)
                 }
             } catch (e) {
                 console.error('Error parsing message:', e)
@@ -52,6 +57,10 @@ function App() {
             const res = await fetch('/api/status')
             const data = await res.json()
             setStatus(data)
+            // Sync demo mode from backend
+            if (data.demo_mode !== undefined) {
+                setDemoMode(data.demo_mode)
+            }
         } catch (e) {
             console.error('Error fetching status:', e)
         }
@@ -68,18 +77,17 @@ function App() {
             const res = await fetch('/api/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
+                body: JSON.stringify({ symbol: currentSymbol })
             })
             const data = await res.json()
             console.log('Started:', data)
             if (data.success) {
-                // Update status immediately
                 setStatus(prev => ({ ...prev, status: 'running' }))
             }
         } catch (e) {
             console.error('Error starting:', e)
         }
-    }, [])
+    }, [currentSymbol])
 
     const stopTrading = useCallback(async () => {
         try {
@@ -91,7 +99,6 @@ function App() {
             const data = await res.json()
             console.log('Stopped:', data)
             if (data.success) {
-                // Update status immediately
                 setStatus(prev => ({ ...prev, status: 'stopped' }))
             }
         } catch (e) {
@@ -109,6 +116,24 @@ function App() {
         }
     }, [])
 
+    const handleSymbolChange = useCallback((symbol) => {
+        setCurrentSymbol(symbol)
+        console.log('Symbol changed to:', symbol)
+    }, [])
+
+    const handleDemoToggle = useCallback(async () => {
+        try {
+            const res = await fetch('/api/demo/toggle', { method: 'POST' })
+            const data = await res.json()
+            if (data.success) {
+                setDemoMode(data.demo_mode)
+                console.log('Demo mode:', data.demo_mode)
+            }
+        } catch (e) {
+            console.error('Error toggling demo mode:', e)
+        }
+    }, [])
+
     return (
         <Dashboard
             isConnected={isConnected}
@@ -117,6 +142,10 @@ function App() {
             onStart={startTrading}
             onStop={stopTrading}
             onTrigger={triggerDebate}
+            currentSymbol={currentSymbol}
+            onSymbolChange={handleSymbolChange}
+            demoMode={demoMode}
+            onDemoToggle={handleDemoToggle}
         />
     )
 }

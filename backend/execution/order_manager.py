@@ -19,7 +19,16 @@ class OrderManager:
     def __init__(self):
         self.positions: List[Position] = []
         self.trade_history: List[Trade] = []
-        self.account_balance = 10000.0  # Simulated starting balance
+        self.account_balance = settings.demo_balance  # Use configured balance
+        self.demo_mode = settings.demo_mode  # Track demo mode state
+    
+    def set_demo_mode(self, enabled: bool):
+        """Toggle demo mode"""
+        self.demo_mode = enabled
+        if enabled:
+            # Reset to demo balance when entering demo mode
+            self.account_balance = settings.demo_balance
+        print(f"📊 Demo mode {'enabled' if enabled else 'disabled'}")
     
     async def execute_trade(self, decision: TradeDecision) -> Optional[Trade]:
         """
@@ -50,15 +59,18 @@ class OrderManager:
                 stop_loss_price = current_price * (1 + decision.stop_loss_pct / 100)
                 take_profit_price = current_price * (1 - decision.take_profit_pct / 100)
             
-            # Place order via WEEX API
-            order_result = await weex_client.place_order(
-                symbol=decision.symbol,
-                side=side,
-                size=quantity,
-                leverage=decision.leverage,
-                stop_loss=stop_loss_price,
-                take_profit=take_profit_price
-            )
+            # Place order via WEEX API (only in live mode)
+            if not self.demo_mode:
+                order_result = await weex_client.place_order(
+                    symbol=decision.symbol,
+                    side=side,
+                    size=quantity,
+                    leverage=decision.leverage,
+                    stop_loss=stop_loss_price,
+                    take_profit=take_profit_price
+                )
+            else:
+                print(f"📝 [DEMO] Simulated order: {side.value} {quantity:.6f} {decision.symbol} @ ${current_price:.2f}")
             
             # Create trade record
             trade = Trade(

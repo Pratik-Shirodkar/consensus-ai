@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createChart } from 'lightweight-charts'
 import './TradingChart.css'
 
-function TradingChart() {
+function TradingChart({ symbol = 'cmt_btcusdt' }) {
     const chartContainerRef = useRef(null)
     const chartRef = useRef(null)
     const candleSeriesRef = useRef(null)
@@ -13,7 +13,7 @@ function TradingChart() {
     // Fetch candle data from API
     const fetchCandles = async () => {
         try {
-            const res = await fetch('/api/candles')
+            const res = await fetch(`/api/candles?symbol=${symbol}`)
             const data = await res.json()
 
             if (data.candles && data.candles.length > 0 && candleSeriesRef.current) {

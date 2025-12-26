@@ -35,6 +35,7 @@ async def get_status():
     return {
         "status": "running" if debate_engine.is_running else "stopped",
         "symbol": settings.default_symbol,
+        "demo_mode": order_manager.demo_mode,
         "debate": debate_stats,
         "trading": trading_stats
     }
@@ -44,6 +45,38 @@ async def get_status():
 async def health_check():
     """Simple health check"""
     return {"status": "healthy", "service": "consensus-ai"}
+
+
+# Demo Mode & Symbols
+@router.get("/demo/status")
+async def get_demo_status():
+    """Get demo mode status"""
+    return {
+        "demo_mode": order_manager.demo_mode,
+        "demo_balance": settings.demo_balance,
+        "current_balance": order_manager.account_balance
+    }
+
+
+@router.post("/demo/toggle")
+async def toggle_demo_mode():
+    """Toggle demo mode on/off"""
+    new_state = not order_manager.demo_mode
+    order_manager.set_demo_mode(new_state)
+    return {
+        "success": True,
+        "demo_mode": new_state,
+        "message": f"Demo mode {'enabled' if new_state else 'disabled'}"
+    }
+
+
+@router.get("/symbols")
+async def get_symbols():
+    """Get available trading symbols"""
+    return {
+        "symbols": settings.allowed_symbols,
+        "current": settings.default_symbol
+    }
 
 
 @router.get("/candles")

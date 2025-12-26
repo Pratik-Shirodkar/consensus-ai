@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     debate_interval_seconds: int = 60  # How often to run debates
     min_confidence_threshold: float = 0.7  # Minimum confidence to propose
     
+    # Demo Mode (for safe testing without real trades)
+    demo_mode: bool = True  # Default to demo mode for safety
+    demo_balance: float = 10000.0  # Simulated starting balance in USDT
+    
+    # Allowed symbols for trading
+    allowed_symbols: list = [
+        "cmt_btcusdt", "cmt_ethusdt", "cmt_solusdt", "cmt_dogeusdt",
+        "cmt_xrpusdt", "cmt_adausdt", "cmt_bnbusdt", "cmt_ltcusdt"
+    ]
+    
     class Config:
         env_file = ".env"
 

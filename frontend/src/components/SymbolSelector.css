@@ -1,0 +1,73 @@
+.symbol-selector {
+    position: relative;
+}
+
+.symbol-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.symbol-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--symbol-color, #7c3aed);
+}
+
+.symbol-icon {
+    font-size: 1.2rem;
+    color: var(--symbol-color, #7c3aed);
+}
+
+.symbol-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.dropdown-arrow {
+    font-size: 0.7rem;
+    opacity: 0.6;
+}
+
+.symbol-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 160px;
+    background: rgba(20, 20, 30, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.symbol-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.symbol-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.symbol-option.active {
+    background: rgba(124, 58, 237, 0.2);
+    border-left: 2px solid var(--symbol-color, #7c3aed);
+}
