@@ -128,7 +128,7 @@ function TradingChart({ symbol = 'cmt_btcusdt' }) {
             window.removeEventListener('resize', handleResize)
             chart.remove()
         }
-    }, [])
+    }, [symbol]) // Re-run when symbol changes
 
     return (
         <div className="trading-chart-container">
