@@ -46,20 +46,36 @@ function App() {
         }
     }, [])
 
+    // Fetch status helper
+    const fetchStatus = useCallback(async () => {
+        try {
+            const res = await fetch('/api/status')
+            const data = await res.json()
+            setStatus(data)
+        } catch (e) {
+            console.error('Error fetching status:', e)
+        }
+    }, [])
+
     // Fetch initial status
     useEffect(() => {
-        fetch('/api/status')
-            .then(res => res.json())
-            .then(data => setStatus(data))
-            .catch(console.error)
-    }, [])
+        fetchStatus()
+    }, [fetchStatus])
 
     // Control functions
     const startTrading = useCallback(async () => {
         try {
-            const res = await fetch('/api/start', { method: 'POST' })
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
             const data = await res.json()
             console.log('Started:', data)
+            if (data.success) {
+                // Update status immediately
+                setStatus(prev => ({ ...prev, status: 'running' }))
+            }
         } catch (e) {
             console.error('Error starting:', e)
         }
@@ -67,9 +83,17 @@ function App() {
 
     const stopTrading = useCallback(async () => {
         try {
-            const res = await fetch('/api/stop', { method: 'POST' })
+            const res = await fetch('/api/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            })
             const data = await res.json()
             console.log('Stopped:', data)
+            if (data.success) {
+                // Update status immediately
+                setStatus(prev => ({ ...prev, status: 'stopped' }))
+            }
         } catch (e) {
             console.error('Error stopping:', e)
         }

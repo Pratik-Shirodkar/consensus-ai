@@ -1,10 +1,44 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createChart } from 'lightweight-charts'
 import './TradingChart.css'
 
 function TradingChart() {
     const chartContainerRef = useRef(null)
     const chartRef = useRef(null)
+    const candleSeriesRef = useRef(null)
+    const volumeSeriesRef = useRef(null)
+    const [lastPrice, setLastPrice] = useState(null)
+    const [priceChange, setPriceChange] = useState(null)
+
+    // Fetch candle data from API
+    const fetchCandles = async () => {
+        try {
+            const res = await fetch('/api/candles')
+            const data = await res.json()
+
+            if (data.candles && data.candles.length > 0 && candleSeriesRef.current) {
+                candleSeriesRef.current.setData(data.candles)
+
+                // Update volume
+                if (volumeSeriesRef.current) {
+                    const volumeData = data.candles.map(c => ({
+                        time: c.time,
+                        value: c.volume || Math.random() * 1000 + 500,
+                        color: c.close >= c.open ? 'rgba(0, 212, 170, 0.3)' : 'rgba(255, 107, 107, 0.3)',
+                    }))
+                    volumeSeriesRef.current.setData(volumeData)
+                }
+
+                // Update price display
+                if (data.ticker) {
+                    setLastPrice(data.ticker.last_price)
+                    setPriceChange(data.ticker.change_pct_24h)
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching candles:', e)
+        }
+    }
 
     useEffect(() => {
         if (!chartContainerRef.current) return
@@ -49,11 +83,7 @@ function TradingChart() {
             wickUpColor: '#00d4aa',
             wickDownColor: '#ff6b6b',
         })
-
-        // Generate sample data (in real app, fetch from WEEX)
-        const now = Math.floor(Date.now() / 1000)
-        const data = generateSampleData(now)
-        candleSeries.setData(data)
+        candleSeriesRef.current = candleSeries
 
         // Add volume series
         const volumeSeries = chart.addHistogramSeries({
@@ -67,13 +97,7 @@ function TradingChart() {
                 bottom: 0,
             },
         })
-
-        const volumeData = data.map(d => ({
-            time: d.time,
-            value: Math.random() * 1000 + 500,
-            color: d.close >= d.open ? 'rgba(0, 212, 170, 0.3)' : 'rgba(255, 107, 107, 0.3)',
-        }))
-        volumeSeries.setData(volumeData)
+        volumeSeriesRef.current = volumeSeries
 
         // Fit content
         chart.timeScale().fitContent()
@@ -93,45 +117,34 @@ function TradingChart() {
 
         chartRef.current = chart
 
+        // Fetch initial data
+        fetchCandles()
+
+        // Set up periodic refresh every 10 seconds
+        const refreshInterval = setInterval(fetchCandles, 10000)
+
         return () => {
+            clearInterval(refreshInterval)
             window.removeEventListener('resize', handleResize)
             chart.remove()
         }
     }, [])
 
     return (
-        <div className="trading-chart" ref={chartContainerRef} />
+        <div className="trading-chart-container">
+            {lastPrice && (
+                <div className="price-display">
+                    <span className="current-price">${lastPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {priceChange !== null && (
+                        <span className={`price-change ${priceChange >= 0 ? 'positive' : 'negative'}`}>
+                            {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+                        </span>
+                    )}
+                </div>
+            )}
+            <div className="trading-chart" ref={chartContainerRef} />
+        </div>
     )
-}
-
-// Generate sample candlestick data
-function generateSampleData(endTime) {
-    const data = []
-    let basePrice = 42000 + Math.random() * 1000
-    const interval = 300 // 5 minutes
-
-    for (let i = 100; i >= 0; i--) {
-        const time = endTime - i * interval
-        const volatility = 0.002
-
-        const open = basePrice
-        const change = (Math.random() - 0.48) * volatility * basePrice
-        const high = open + Math.abs(change) + Math.random() * 50
-        const low = open - Math.abs(change) - Math.random() * 50
-        const close = open + change
-
-        data.push({
-            time,
-            open,
-            high: Math.max(open, close, high),
-            low: Math.min(open, close, low),
-            close,
-        })
-
-        basePrice = close
-    }
-
-    return data
 }
 
 export default TradingChart

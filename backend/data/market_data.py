@@ -1,16 +1,92 @@
 """
 Market data service for aggregating and caching data
+Includes mock data fallback for demo mode
 """
 import asyncio
+import random
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 from data.weex_client import weex_client
-from data.data_models import MarketData, Candle, OrderBook, Ticker
+from data.data_models import MarketData, Candle, OrderBook, OrderBookLevel, Ticker
+from config.settings import settings
+
+
+def generate_mock_candles(base_price: float = 98500, count: int = 100) -> List[Candle]:
+    """Generate realistic mock candlestick data"""
+    candles = []
+    price = base_price
+    now = datetime.now()
+    
+    for i in range(count, 0, -1):
+        volatility = 0.002
+        change = (random.random() - 0.48) * volatility * price
+        
+        open_p = price
+        close_p = price + change
+        high_p = max(open_p, close_p) + random.random() * 50
+        low_p = min(open_p, close_p) - random.random() * 50
+        volume = random.uniform(100, 500)
+        
+        candles.append(Candle(
+            timestamp=now - timedelta(minutes=i * 5),
+            open=open_p,
+            high=high_p,
+            low=low_p,
+            close=close_p,
+            volume=volume
+        ))
+        
+        price = close_p
+    
+    return candles
+
+
+def generate_mock_ticker(symbol: str, last_candle: Candle) -> Ticker:
+    """Generate mock ticker from candle data"""
+    return Ticker(
+        symbol=symbol,
+        last_price=last_candle.close,
+        bid=last_candle.close - random.uniform(0.5, 2),
+        ask=last_candle.close + random.uniform(0.5, 2),
+        volume_24h=random.uniform(1000000, 5000000),
+        change_24h=random.uniform(-500, 500),
+        change_pct_24h=random.uniform(-2, 2),
+        high_24h=last_candle.close + random.uniform(100, 300),
+        low_24h=last_candle.close - random.uniform(100, 300),
+        timestamp=datetime.now()
+    )
+
+
+def generate_mock_orderbook(base_price: float) -> OrderBook:
+    """Generate mock order book"""
+    bids = []
+    asks = []
+    
+    for i in range(10):
+        bid_price = base_price - (i + 1) * random.uniform(1, 5)
+        ask_price = base_price + (i + 1) * random.uniform(1, 5)
+        
+        bids.append(OrderBookLevel(
+            price=bid_price,
+            quantity=random.uniform(0.1, 2.0)
+        ))
+        asks.append(OrderBookLevel(
+            price=ask_price,
+            quantity=random.uniform(0.1, 2.0)
+        ))
+    
+    return OrderBook(
+        symbol="cmt_btcusdt",
+        timestamp=datetime.now(),
+        bids=bids,
+        asks=asks
+    )
 
 
 class MarketDataService:
     """
     Aggregates market data from WEEX and provides a unified interface
+    Falls back to mock data for demo mode
     """
     
     def __init__(self):
@@ -20,6 +96,12 @@ class MarketDataService:
         self._funding_cache: Dict[str, float] = {}
         self._last_update: Dict[str, datetime] = {}
         self._cache_ttl = timedelta(seconds=5)
+        # Check if WEEX credentials are properly configured
+        self._use_mock = not settings.weex_api_key or settings.weex_api_key == "your_api_key" or len(settings.weex_api_key) < 10
+        print(f"📊 MarketDataService initialized - Using {'MOCK' if self._use_mock else 'REAL WEEX'} data")
+        if not self._use_mock:
+            print(f"   WEEX API Key: {settings.weex_api_key[:10]}...")
+
     
     def _is_cache_valid(self, key: str) -> bool:
         """Check if cached data is still valid"""
@@ -30,22 +112,45 @@ class MarketDataService:
     async def get_market_data(self, symbol: str) -> MarketData:
         """
         Get aggregated market data for a symbol
-        Fetches fresh data if cache is expired
+        Uses mock data if WEEX credentials aren't configured
         """
-        # Fetch all data concurrently
-        ticker, candles, orderbook, funding = await asyncio.gather(
-            self.get_ticker(symbol),
-            self.get_candles(symbol),
-            self.get_orderbook(symbol),
-            self.get_funding_rate(symbol)
+        if self._use_mock:
+            return await self._get_mock_market_data(symbol)
+        
+        try:
+            # Fetch all data concurrently
+            ticker, candles, orderbook, funding = await asyncio.gather(
+                self.get_ticker(symbol),
+                self.get_candles(symbol),
+                self.get_orderbook(symbol),
+                self.get_funding_rate(symbol)
+            )
+            
+            return MarketData(
+                symbol=symbol,
+                ticker=ticker,
+                candles=candles,
+                orderbook=orderbook,
+                funding_rate=funding
+            )
+        except Exception as e:
+            print(f"Error fetching market data, falling back to mock: {e}")
+            return await self._get_mock_market_data(symbol)
+    
+    async def _get_mock_market_data(self, symbol: str) -> MarketData:
+        """Generate mock market data for demo purposes"""
+        candles = generate_mock_candles()
+        last_candle = candles[-1] if candles else Candle(
+            timestamp=datetime.now(),
+            open=98500, high=98600, low=98400, close=98550, volume=100
         )
         
         return MarketData(
             symbol=symbol,
-            ticker=ticker,
+            ticker=generate_mock_ticker(symbol, last_candle),
             candles=candles,
-            orderbook=orderbook,
-            funding_rate=funding
+            orderbook=generate_mock_orderbook(last_candle.close),
+            funding_rate=random.uniform(-0.001, 0.001)
         )
     
     async def get_ticker(self, symbol: str) -> Ticker:

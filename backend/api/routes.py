@@ -46,6 +46,39 @@ async def health_check():
     return {"status": "healthy", "service": "consensus-ai"}
 
 
+@router.get("/candles")
+async def get_candles(symbol: str = "cmt_btcusdt", interval: str = "5m", limit: int = 100):
+    """Get candlestick data for chart"""
+    from data.market_data import market_data_service
+    
+    try:
+        market_data = await market_data_service.get_market_data(symbol)
+        candles = market_data.candles[-limit:] if market_data.candles else []
+        
+        return {
+            "symbol": symbol,
+            "interval": interval,
+            "candles": [
+                {
+                    "time": int(c.timestamp.timestamp()),
+                    "open": c.open,
+                    "high": c.high,
+                    "low": c.low,
+                    "close": c.close,
+                    "volume": c.volume
+                }
+                for c in candles
+            ],
+            "ticker": {
+                "last_price": market_data.ticker.last_price if market_data.ticker else 0,
+                "change_pct_24h": market_data.ticker.change_pct_24h if market_data.ticker else 0
+            } if market_data.ticker else None
+        }
+    except Exception as e:
+        print(f"Error fetching candles: {e}")
+        return {"symbol": symbol, "interval": interval, "candles": [], "error": str(e)}
+
+
 # Trading Session Control
 @router.post("/start")
 async def start_trading(request: StartSessionRequest):

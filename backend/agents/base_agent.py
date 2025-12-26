@@ -97,42 +97,64 @@ ORDER BOOK DEPTH:
     async def _call_llm(self, user_message: str) -> str:
         """Make LLM API call via AWS Bedrock"""
         
-        # Build messages array
-        messages = [
-            *self.message_history,
-            {"role": "user", "content": user_message}
-        ]
-        
-        # Prepare the request body for Claude
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
-            "system": self.system_prompt,
-            "messages": messages,
-            "temperature": 0.7
-        })
-        
-        # Invoke Bedrock
-        response = self.bedrock_client.invoke_model(
-            modelId=self.model_id,
-            body=body,
-            contentType="application/json",
-            accept="application/json"
-        )
-        
-        # Parse response
-        response_body = json.loads(response['body'].read())
-        assistant_message = response_body['content'][0]['text']
-        
-        # Add to history for context
-        self.message_history.append({"role": "user", "content": user_message})
-        self.message_history.append({"role": "assistant", "content": assistant_message})
-        
-        # Keep history manageable
-        if len(self.message_history) > 10:
-            self.message_history = self.message_history[-10:]
-        
-        return assistant_message
+        try:
+            # Build messages array
+            messages = [
+                *self.message_history,
+                {"role": "user", "content": user_message}
+            ]
+            
+            # Prepare the request body for Claude
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 1000,
+                "system": self.system_prompt,
+                "messages": messages,
+                "temperature": 0.7
+            })
+            
+            print(f"[{self.name}] Calling Bedrock model: {self.model_id}")
+            
+            # Invoke Bedrock
+            response = self.bedrock_client.invoke_model(
+                modelId=self.model_id,
+                body=body,
+                contentType="application/json",
+                accept="application/json"
+            )
+            
+            # Parse response
+            response_body = json.loads(response['body'].read())
+            assistant_message = response_body['content'][0]['text']
+            
+            # Add to history for context
+            self.message_history.append({"role": "user", "content": user_message})
+            self.message_history.append({"role": "assistant", "content": assistant_message})
+            
+            # Keep history manageable
+            if len(self.message_history) > 10:
+                self.message_history = self.message_history[-10:]
+            
+            return assistant_message
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[{self.name}] Bedrock API Error: {error_msg}")
+            
+            # Check for common issues
+            if "AccessDeniedException" in error_msg:
+                raise Exception(
+                    f"AWS Bedrock Access Denied. You need to request access to {self.model_id} "
+                    f"in the AWS Console: https://console.aws.amazon.com/bedrock/home?region={settings.aws_region}#/modelaccess"
+                )
+            elif "ValidationException" in error_msg:
+                raise Exception(f"Invalid model ID or request format: {error_msg}")
+            elif "ResourceNotFoundException" in error_msg:
+                raise Exception(
+                    f"Model {self.model_id} not found. Check if it's available in region {settings.aws_region}"
+                )
+            else:
+                raise Exception(f"Bedrock API Error: {error_msg}")
     
     def create_message(self, content: str, confidence: float = None) -> DebateMessage:
         """Create a debate message from this agent"""

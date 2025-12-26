@@ -40,6 +40,12 @@ class WEEXClient:
         self.ws_url = "wss://ws-contract.weex.com/ws"
         self._ws_connection = None
         self._ws_callbacks: Dict[str, List[Callable]] = {}
+        # Headers to bypass Cloudflare protection
+        self._default_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
     
     def _generate_signature_get(
         self, 
@@ -106,25 +112,40 @@ class WEEXClient:
     
     async def get_ticker(self, symbol: str = "cmt_btcusdt") -> Ticker:
         """Get current ticker for a symbol"""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.base_url}/capi/v2/market/ticker",
-                params={"symbol": symbol}
-            )
-            data = response.json()
-            
-            return Ticker(
-                symbol=symbol,
-                last_price=float(data.get("last", 0)),
-                bid=float(data.get("best_bid", 0)),
-                ask=float(data.get("best_ask", 0)),
-                volume_24h=float(data.get("volume_24h", 0)),
-                change_24h=0,
-                change_pct_24h=float(data.get("priceChangePercent", 0)) * 100,
-                high_24h=float(data.get("high_24h", 0)),
-                low_24h=float(data.get("low_24h", 0)),
-                timestamp=datetime.now()
-            )
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=self._default_headers) as client:
+                response = await client.get(
+                    f"{self.base_url}/capi/v2/market/ticker",
+                    params={"symbol": symbol}
+                )
+                print(f"📈 WEEX Ticker Response Status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"   Error: {response.text[:200]}")
+                    raise Exception(f"API error: {response.status_code}")
+                
+                data = response.json()
+                print(f"   Ticker data keys: {list(data.keys()) if isinstance(data, dict) else 'list'}")
+                
+                # Handle different response structures
+                if isinstance(data, dict) and "data" in data:
+                    data = data["data"]
+                
+                return Ticker(
+                    symbol=symbol,
+                    last_price=float(data.get("last", data.get("lastPr", 0))),
+                    bid=float(data.get("best_bid", data.get("bidPr", 0))),
+                    ask=float(data.get("best_ask", data.get("askPr", 0))),
+                    volume_24h=float(data.get("volume_24h", data.get("baseVolume", 0))),
+                    change_24h=0,
+                    change_pct_24h=float(data.get("priceChangePercent", data.get("change24h", 0))),
+                    high_24h=float(data.get("high_24h", data.get("high24h", 0))),
+                    low_24h=float(data.get("low_24h", data.get("low24h", 0))),
+                    timestamp=datetime.now()
+                )
+        except Exception as e:
+            print(f"❌ Error fetching ticker: {e}")
+            raise
     
     async def get_klines(
         self, 
@@ -140,28 +161,58 @@ class WEEXClient:
         }
         weex_interval = interval_map.get(interval, "5m")
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.base_url}/capi/v2/market/candles",
-                params={
+        try:
+            async with httpx.AsyncClient(timeout=10.0, headers=self._default_headers) as client:
+                url = f"{self.base_url}/capi/v2/market/candles"
+                params = {
                     "symbol": symbol,
                     "granularity": weex_interval,
                     "limit": limit
                 }
-            )
-            data = response.json()
-            
-            candles = []
-            for item in data if isinstance(data, list) else data.get("data", []):
-                candles.append(Candle(
-                    timestamp=datetime.fromtimestamp(int(item[0]) / 1000),
-                    open=float(item[1]),
-                    high=float(item[2]),
-                    low=float(item[3]),
-                    close=float(item[4]),
-                    volume=float(item[5]) if len(item) > 5 else 0
-                ))
-            return candles
+                print(f"📊 WEEX Klines Request: {url} with params {params}")
+                
+                response = await client.get(url, params=params)
+                print(f"   Response Status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"   Error: {response.text[:200]}")
+                    raise Exception(f"API error: {response.status_code}")
+                
+                raw_data = response.text
+                print(f"   Raw response (first 200 chars): {raw_data[:200]}")
+                
+                data = response.json()
+                
+                # Handle different response structures
+                candle_list = []
+                if isinstance(data, list):
+                    candle_list = data
+                elif isinstance(data, dict):
+                    candle_list = data.get("data", [])
+                    if not candle_list:
+                        print(f"   Response structure: {list(data.keys())}")
+                
+                print(f"   Found {len(candle_list)} candles")
+                
+                candles = []
+                for item in candle_list:
+                    try:
+                        candles.append(Candle(
+                            timestamp=datetime.fromtimestamp(int(item[0]) / 1000),
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[5]) if len(item) > 5 else 0
+                        ))
+                    except (IndexError, ValueError) as e:
+                        print(f"   Error parsing candle: {item} - {e}")
+                        continue
+                
+                return candles
+        except Exception as e:
+            print(f"❌ Error fetching klines: {e}")
+            raise
     
     async def get_orderbook(self, symbol: str = "cmt_btcusdt", depth: int = 20) -> OrderBook:
         """Get order book snapshot"""

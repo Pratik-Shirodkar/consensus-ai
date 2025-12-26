@@ -1,5 +1,47 @@
-.trading-chart {
+.trading-chart-container {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-height: 300px;
+    position: relative;
+}
+
+.trading-chart {
+    flex: 1;
+    min-height: 280px;
     padding: 8px;
+}
+
+.price-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    margin: 8px 8px 0;
+}
+
+.current-price {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+}
+
+.price-change {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.price-change.positive {
+    color: #00d4aa;
+    background: rgba(0, 212, 170, 0.15);
+}
+
+.price-change.negative {
+    color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.15);
 }
