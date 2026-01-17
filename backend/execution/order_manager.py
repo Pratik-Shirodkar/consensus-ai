@@ -1,13 +1,16 @@
 """
 Order Manager - Handles trade execution via WEEX API
+With integrated AI log upload for hackathon compliance
 """
 import uuid
-from typing import Optional, List
+import asyncio
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from data.data_models import (
     TradeDecision, Trade, Position, OrderSide, TradeAction
 )
 from data.weex_client import weex_client
+from data.ai_log_uploader import ai_log_uploader
 from config.settings import settings
 
 
@@ -30,12 +33,23 @@ class OrderManager:
             self.account_balance = settings.demo_balance
         print(f"📊 Demo mode {'enabled' if enabled else 'disabled'}")
     
-    async def execute_trade(self, decision: TradeDecision) -> Optional[Trade]:
+    async def execute_trade(
+        self, 
+        decision: TradeDecision,
+        debate_context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Trade]:
         """
-        Execute a trade based on Risk Manager's decision
+        Execute a trade based on Risk Manager's decision.
+        Automatically uploads AI log to WEEX for hackathon compliance.
+        
+        Args:
+            decision: The approved TradeDecision from Risk Manager
+            debate_context: Optional dict with bull_analysis, bear_analysis for AI logging
         """
         if not decision.approved:
             return None
+        
+        order_id = None
         
         try:
             # Calculate position size
@@ -69,6 +83,8 @@ class OrderManager:
                     stop_loss=stop_loss_price,
                     take_profit=take_profit_price
                 )
+                # Extract order ID for AI log
+                order_id = order_result.get("order_id") or order_result.get("orderId")
             else:
                 print(f"📝 [DEMO] Simulated order: {side.value} {quantity:.6f} {decision.symbol} @ ${current_price:.2f}")
             
@@ -103,11 +119,83 @@ class OrderManager:
             self.positions.append(position)
             self.trade_history.append(trade)
             
+            # Upload AI log for hackathon compliance (non-blocking)
+            asyncio.create_task(self._upload_trade_ai_log(
+                decision=decision,
+                current_price=current_price,
+                order_id=order_id,
+                debate_context=debate_context
+            ))
+            
             return trade
             
         except Exception as e:
             print(f"Error executing trade: {e}")
             return None
+    
+    async def _upload_trade_ai_log(
+        self,
+        decision: TradeDecision,
+        current_price: float,
+        order_id: Optional[int] = None,
+        debate_context: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Upload AI log to WEEX for hackathon compliance.
+        This runs in the background to not block trade execution.
+        """
+        try:
+            input_data = {
+                "prompt": f"Evaluate trading opportunity for {decision.symbol}",
+                "market_data": {
+                    "symbol": decision.symbol,
+                    "price": current_price
+                }
+            }
+            
+            # Include debate context if provided
+            if debate_context:
+                if "bull_analysis" in debate_context:
+                    input_data["bull_analysis"] = {
+                        "action": debate_context["bull_analysis"].get("action"),
+                        "confidence": debate_context["bull_analysis"].get("confidence"),
+                        "reasoning": str(debate_context["bull_analysis"].get("reasoning", ""))[:300]
+                    }
+                if "bear_analysis" in debate_context:
+                    input_data["bear_analysis"] = {
+                        "action": debate_context["bear_analysis"].get("action"),
+                        "confidence": debate_context["bear_analysis"].get("confidence"),
+                        "reasoning": str(debate_context["bear_analysis"].get("reasoning", ""))[:300]
+                    }
+            
+            output_data = {
+                "decision": "APPROVE" if decision.approved else "REJECT",
+                "action": decision.action.value if hasattr(decision.action, 'value') else str(decision.action),
+                "position_size_pct": decision.size_pct,
+                "leverage": decision.leverage,
+                "stop_loss_pct": decision.stop_loss_pct,
+                "take_profit_pct": decision.take_profit_pct,
+                "entry_price": current_price
+            }
+            
+            explanation = (
+                f"Consensus AI multi-agent system executed {decision.action} on {decision.symbol} at ${current_price:.2f}. "
+                f"Position size: {decision.size_pct:.1f}% with {decision.leverage}x leverage. "
+                f"Stop-loss: {decision.stop_loss_pct:.1f}%, Take-profit: {decision.take_profit_pct:.1f}%. "
+                f"{decision.reasoning[:500] if decision.reasoning else ''}"
+            )
+            
+            await ai_log_uploader.upload_ai_log(
+                stage="Order Execution",
+                model="Claude-3.5-sonnet (AWS Bedrock)",
+                input_data=input_data,
+                output_data=output_data,
+                explanation=explanation,
+                order_id=int(order_id) if order_id else None
+            )
+            
+        except Exception as e:
+            print(f"⚠️ Failed to upload AI log (non-critical): {e}")
     
     async def close_position(
         self, 

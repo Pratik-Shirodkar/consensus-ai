@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     weex_passphrase: str = os.getenv("WEEX_PASSPHRASE", "")
     weex_base_url: str = os.getenv("WEEX_BASE_URL", "https://api-contract.weex.com")
     
-    # Trading Parameters
-    max_leverage: int = int(os.getenv("MAX_LEVERAGE", "20"))
-    max_position_size_pct: float = float(os.getenv("MAX_POSITION_SIZE_PCT", "10"))
+    # Trading Parameters - COMPETITION MODE
+    max_leverage: int = int(os.getenv("MAX_LEVERAGE", "20"))  # Max for competition
+    max_position_size_pct: float = float(os.getenv("MAX_POSITION_SIZE_PCT", "15"))  # Aggressive
     default_symbol: str = os.getenv("DEFAULT_SYMBOL", "cmt_btcusdt")
     trading_interval: str = os.getenv("TRADING_INTERVAL", "5m")
     
@@ -33,13 +33,13 @@ class Settings(BaseSettings):
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))
     
-    # Debate settings
-    debate_interval_seconds: int = 60  # How often to run debates
-    min_confidence_threshold: float = 0.7  # Minimum confidence to propose
+    # Debate settings - Aggressive for competition
+    debate_interval_seconds: int = 30  # Faster debates = more opportunities
+    min_confidence_threshold: float = 0.6  # Lower threshold = more trades
     
     # Demo Mode (for safe testing without real trades)
-    demo_mode: bool = True  # Default to demo mode for safety
-    demo_balance: float = 10000.0  # Simulated starting balance in USDT
+    demo_mode: bool = False  # LIVE MODE for competition
+    demo_balance: float = 10000.0  # Not used in live mode
     
     # Allowed symbols for trading
     allowed_symbols: list = [

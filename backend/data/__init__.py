@@ -5,11 +5,13 @@ from .data_models import (
 )
 from .weex_client import weex_client, WEEXClient
 from .market_data import market_data_service, MarketDataService
+from .ai_log_uploader import ai_log_uploader, AILogUploader
 
 __all__ = [
     "Candle", "OrderBook", "OrderBookLevel", "Ticker", "MarketData",
     "TechnicalSignal", "SignalStrength", "TradeProposal", "TradeAction",
     "DebateMessage", "TradeDecision", "Position", "Trade", "OrderSide",
     "weex_client", "WEEXClient",
-    "market_data_service", "MarketDataService"
+    "market_data_service", "MarketDataService",
+    "ai_log_uploader", "AILogUploader"
 ]
