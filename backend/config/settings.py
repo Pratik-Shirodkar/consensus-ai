@@ -23,19 +23,19 @@ class Settings(BaseSettings):
     weex_passphrase: str = os.getenv("WEEX_PASSPHRASE", "")
     weex_base_url: str = os.getenv("WEEX_BASE_URL", "https://api-contract.weex.com")
     
-    # Trading Parameters - COMPETITION MODE
+    # Trading Parameters - COMPETITION MODE (AGGRESSIVE)
     max_leverage: int = int(os.getenv("MAX_LEVERAGE", "20"))  # Max for competition
-    max_position_size_pct: float = float(os.getenv("MAX_POSITION_SIZE_PCT", "15"))  # Aggressive
+    max_position_size_pct: float = float(os.getenv("MAX_POSITION_SIZE_PCT", "25"))  # Very aggressive
     default_symbol: str = os.getenv("DEFAULT_SYMBOL", "cmt_btcusdt")
-    trading_interval: str = os.getenv("TRADING_INTERVAL", "5m")
+    trading_interval: str = os.getenv("TRADING_INTERVAL", "1m")  # Faster interval
     
     # Server
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))
     
-    # Debate settings - Aggressive for competition
-    debate_interval_seconds: int = 30  # Faster debates = more opportunities
-    min_confidence_threshold: float = 0.6  # Lower threshold = more trades
+    # Debate settings - ULTRA AGGRESSIVE for competition
+    debate_interval_seconds: int = 15  # Much faster debates = more opportunities
+    min_confidence_threshold: float = 0.55  # Lower threshold = many more trades
     
     # Demo Mode (for safe testing without real trades)
     demo_mode: bool = False  # LIVE MODE for competition

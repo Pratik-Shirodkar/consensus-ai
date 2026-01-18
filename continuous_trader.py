@@ -18,13 +18,14 @@ SECRET_KEY = "c7270ae5f736e1fc2345d716a299482c017c7bc5639f4e7a0d866ef9a570e02e"
 PASSPHRASE = "weex26647965"
 BASE_URL = "https://api-contract.weex.com"
 
-# Competition settings
+# Competition settings - AGGRESSIVE MODE
 MAX_LEVERAGE = 20
-POSITION_SIZE = "0.0002"  # Valid stepSize for BTC
-MIN_TRADE_INTERVAL = 60  # Minimum seconds between trades
-MAX_DAILY_TRADES = 50  # Limit trades per day
-MAX_DRAWDOWN_PCT = 20  # Stop if down 20%
+POSITION_SIZE = "0.001"  # Larger size for BTC (~$95)
+MIN_TRADE_INTERVAL = 20  # Fast trading - 20 seconds between trades
+MAX_DAILY_TRADES = 200  # High volume for competition
+MAX_DRAWDOWN_PCT = 35  # Higher tolerance for competition
 STARTING_BALANCE = 1000.0
+MIN_CONFIDENCE = 0.55  # Lower threshold = more trades
 
 # All supported symbols
 SYMBOLS = [
@@ -32,16 +33,16 @@ SYMBOLS = [
     "cmt_xrpusdt", "cmt_adausdt", "cmt_bnbusdt", "cmt_ltcusdt"
 ]
 
-# Position sizes for different coins (in their native units)
+# Position sizes for different coins - 5X LARGER FOR COMPETITION
 POSITION_SIZES = {
-    "cmt_btcusdt": "0.0002",   # ~$19
-    "cmt_ethusdt": "0.006",    # ~$19
-    "cmt_solusdt": "0.15",     # ~$21
-    "cmt_dogeusdt": "150",     # ~$21
-    "cmt_xrpusdt": "10",       # ~$20
-    "cmt_adausdt": "50",       # ~$20
-    "cmt_bnbusdt": "0.02",     # ~$19
-    "cmt_ltcusdt": "0.25",     # ~$19
+    "cmt_btcusdt": "0.001",    # ~$95 (5x larger)
+    "cmt_ethusdt": "0.03",     # ~$95
+    "cmt_solusdt": "0.6",      # ~$84
+    "cmt_dogeusdt": "600",     # ~$84
+    "cmt_xrpusdt": "40",       # ~$80
+    "cmt_adausdt": "200",      # ~$80
+    "cmt_bnbusdt": "0.1",      # ~$95
+    "cmt_ltcusdt": "1.0",      # ~$80
 }
 
 def send_get(path, qs=""):
@@ -115,21 +116,22 @@ def get_rsi(symbol):
     return 50  # Neutral if can't calculate
 
 def analyze_market(symbol):
-    """Simple market analysis - returns signal and confidence"""
+    """Aggressive market analysis - wider bands for more signals"""
     rsi = get_rsi(symbol)
     
-    # Oversold = buy opportunity
-    if rsi < 35:
-        return "LONG", 0.75, f"RSI oversold at {rsi:.1f}"
+    # AGGRESSIVE RSI BANDS - more signals for competition
     # Very oversold = strong buy
-    elif rsi < 25:
-        return "LONG", 0.85, f"RSI very oversold at {rsi:.1f}"
-    # Overbought = potential short
-    elif rsi > 70:
-        return "SHORT", 0.65, f"RSI overbought at {rsi:.1f}"
+    if rsi < 25:
+        return "LONG", 0.85, f"RSI very oversold at {rsi:.1f} - STRONG BUY"
+    # Oversold = buy opportunity (widened from 35 to 45)
+    elif rsi < 45:
+        return "LONG", 0.70, f"RSI oversold at {rsi:.1f} - buy opportunity"
     # Very overbought = strong short
     elif rsi > 80:
-        return "SHORT", 0.75, f"RSI very overbought at {rsi:.1f}"
+        return "SHORT", 0.80, f"RSI very overbought at {rsi:.1f} - STRONG SELL"
+    # Overbought = potential short (widened from 70 to 60)
+    elif rsi > 60:
+        return "SHORT", 0.65, f"RSI overbought at {rsi:.1f} - short opportunity"
     else:
         return "HOLD", 0.5, f"RSI neutral at {rsi:.1f}"
 
@@ -231,7 +233,7 @@ def run_continuous_trading():
                     best_symbol = symbol
                     best_reason = reason
             
-            if best_signal and best_confidence >= 0.65:
+            if best_signal and best_confidence >= MIN_CONFIDENCE:
                 symbol = best_symbol
                 price = get_price(symbol)
                 size = POSITION_SIZES.get(symbol, "0.0002")
