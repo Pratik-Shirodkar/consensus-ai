@@ -36,8 +36,8 @@ MAX_DAILY_TRADES = 500   # Very high volume
 MAX_DRAWDOWN_PCT = 50    # Accept higher drawdown for competition
 STARTING_BALANCE = 1000.0
 MIN_CONFIDENCE = 0.55    # Lower threshold = more trades
-PROFIT_TARGET_PCT = 1.5  # Take profit at 1.5% unrealized gain
-STOP_LOSS_PCT = 1.0      # Cut losses at 1.0% unrealized loss
+PROFIT_TARGET_PCT = 1.5  # Take profit at 1.5% LEVERAGED return (not price move)
+STOP_LOSS_PCT = 1.0      # Cut losses at 1.0% LEVERAGED return
 MAX_HOLD_TIME = 900      # Maximum 15 minutes per trade
 MAX_CONCURRENT_POSITIONS = 5  # Max positions at once
 
@@ -373,19 +373,23 @@ def manage_position(symbol: str, signal: str, confidence: float, reasoning: str)
             log(f"   ⚠️ {coin} Price fetch failed, skipping check...")
             continue
         
+        # Calculate LEVERAGED PnL (price_change * leverage)
         if signal == "LONG":
-            pnl_pct = ((current_price - entry_price) / entry_price) * 100
+            price_change_pct = ((current_price - entry_price) / entry_price) * 100
         else:
-            pnl_pct = ((entry_price - current_price) / entry_price) * 100
+            price_change_pct = ((entry_price - current_price) / entry_price) * 100
         
-        # Take profit
-        if pnl_pct >= PROFIT_TARGET_PCT:
-            log(f"   💰 {coin} Taking profit: +{pnl_pct:.2f}%")
+        # Apply leverage to get actual margin PnL
+        leveraged_pnl_pct = price_change_pct * MAX_LEVERAGE
+        
+        # Take profit based on LEVERAGED return
+        if leveraged_pnl_pct >= PROFIT_TARGET_PCT:
+            log(f"   💰 {coin} Taking profit: +{leveraged_pnl_pct:.2f}% (price: {price_change_pct:+.3f}%)")
             break
         
-        # Cut loss
-        if pnl_pct <= -STOP_LOSS_PCT:
-            log(f"   🛑 {coin} Cutting loss: {pnl_pct:.2f}%")
+        # Cut loss based on LEVERAGED return
+        if leveraged_pnl_pct <= -STOP_LOSS_PCT:
+            log(f"   🛑 {coin} Cutting loss: {leveraged_pnl_pct:.2f}% (price: {price_change_pct:+.3f}%)")
             break
     
     # Close position with retry logic
@@ -412,14 +416,17 @@ def manage_position(symbol: str, signal: str, confidence: float, reasoning: str)
             log(f"   ⚠️ {coin} Final price fetch failed, using entry price for P&L calculation")
         
         if signal == "LONG":
-            final_pnl = ((final_price - entry_price) / entry_price) * 100
+            price_change_pct = ((final_price - entry_price) / entry_price) * 100
         else:
-            final_pnl = ((entry_price - final_price) / entry_price) * 100
+            price_change_pct = ((entry_price - final_price) / entry_price) * 100
+        
+        # Calculate LEVERAGED PnL
+        final_pnl = price_change_pct * MAX_LEVERAGE
         
         emoji = "✅" if final_pnl > 0 else "❌"
-        log(f"   {emoji} {coin} Closed: P&L: {final_pnl:+.2f}%")
+        log(f"   {emoji} {coin} Closed: P&L: {final_pnl:+.2f}% (price: {price_change_pct:+.3f}%)")
         
-        upload_ai_log(close_id, symbol, f"CLOSE_{signal}", f"Position closed with {final_pnl:+.2f}% P&L", 0.8, final_price)
+        upload_ai_log(close_id, symbol, f"CLOSE_{signal}", f"Position closed with {final_pnl:+.2f}% leveraged P&L", 0.8, final_price)
     else:
         # CRITICAL: Close order failed after all retries
         log(f"   ❌❌ {coin} CRITICAL: Position close FAILED after {max_close_attempts} attempts!")
