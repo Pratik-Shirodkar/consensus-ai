@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-AGGRESSIVE AI Trading Bot for WEEX Competition
-Optimized for maximum trade volume and profit potential.
+ULTRA AGGRESSIVE AI Trading Bot for WEEX Competition
+Multi-Position Concurrent Trading with Maximum Margins
 
 Features:
-- Multi-indicator analysis (RSI + MACD + Volume + Momentum)
-- Large position sizes (~$80-100 per trade)
+- MULTI-POSITION: Opens trades on ALL symbols simultaneously
+- Large position sizes (~$150 per trade)
+- Async position management (doesn't block on one trade)
 - Dynamic profit-taking and loss-cutting
-- Multi-symbol scanning with opportunity ranking
-- Fast execution with 15-20 second intervals
 """
 
 import time
@@ -17,9 +16,10 @@ import hashlib
 import base64
 import requests
 import json
-import asyncio
+import threading
 from datetime import datetime
 from typing import Optional, Tuple, Dict, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # =============================================================================
 # CONFIGURATION - ULTRA AGGRESSIVE FOR COMPETITION
@@ -31,14 +31,15 @@ BASE_URL = "https://api-contract.weex.com"
 
 # Trading parameters - MAXIMUM AGGRESSION
 MAX_LEVERAGE = 20
-MIN_TRADE_INTERVAL = 15  # 15 seconds between scans
-MAX_DAILY_TRADES = 300   # High volume
-MAX_DRAWDOWN_PCT = 40    # Accept higher drawdown for competition
+MIN_TRADE_INTERVAL = 10  # 10 seconds between scan cycles
+MAX_DAILY_TRADES = 500   # Very high volume
+MAX_DRAWDOWN_PCT = 50    # Accept higher drawdown for competition
 STARTING_BALANCE = 1000.0
 MIN_CONFIDENCE = 0.55    # Lower threshold = more trades
-PROFIT_TARGET_PCT = 0.5  # Take profit at 0.5% unrealized gain
-STOP_LOSS_PCT = 0.4      # Cut losses at 0.4% unrealized loss
-MAX_HOLD_TIME = 180      # Maximum 3 minutes per trade
+PROFIT_TARGET_PCT = 1.5  # Take profit at 1.5% unrealized gain
+STOP_LOSS_PCT = 1.0      # Cut losses at 1.0% unrealized loss
+MAX_HOLD_TIME = 900      # Maximum 15 minutes per trade
+MAX_CONCURRENT_POSITIONS = 5  # Max positions at once
 
 # All tradeable symbols
 SYMBOLS = [
@@ -46,17 +47,21 @@ SYMBOLS = [
     "cmt_xrpusdt", "cmt_adausdt", "cmt_bnbusdt", "cmt_ltcusdt"
 ]
 
-# Aggressive position sizes (~$80-100 per trade)
+# ULTRA AGGRESSIVE position sizes (~$150 per trade)
 POSITION_SIZES = {
-    "cmt_btcusdt": "0.001",     # ~$95
-    "cmt_ethusdt": "0.03",      # ~$95
-    "cmt_solusdt": "0.6",       # ~$84
-    "cmt_dogeusdt": "600",      # ~$84
-    "cmt_xrpusdt": "40",        # ~$80
-    "cmt_adausdt": "200",       # ~$80
-    "cmt_bnbusdt": "0.1",       # ~$95
-    "cmt_ltcusdt": "1.0",       # ~$80
+    "cmt_btcusdt": "0.0015",    # ~$145
+    "cmt_ethusdt": "0.045",     # ~$145
+    "cmt_solusdt": "1.0",       # ~$140
+    "cmt_dogeusdt": "1000",     # ~$140
+    "cmt_xrpusdt": "70",        # ~$140
+    "cmt_adausdt": "350",       # ~$140
+    "cmt_bnbusdt": "0.15",      # ~$140
+    "cmt_ltcusdt": "1.5",       # ~$120
 }
+
+# Track open positions
+open_positions = {}
+positions_lock = threading.Lock()
 
 # =============================================================================
 # API FUNCTIONS
@@ -156,7 +161,7 @@ def upload_ai_log(order_id: int, symbol: str, action: str, reasoning: str, confi
             "confidence": confidence,
             "reasoning": reasoning
         },
-        "explanation": f"Aggressive AI: {reasoning}"
+        "explanation": f"Multi-Position AI: {reasoning}"
     }
     r = send_post("/capi/v2/order/uploadAiLog", body)
     return safe_json(r)
@@ -205,7 +210,6 @@ def calculate_macd(closes: List[float]) -> Tuple[float, float, float]:
     ema26 = ema(closes, 26)
     macd_line = ema12 - ema26
     
-    # Simple signal line approximation
     signal_line = ema(closes[-9:], 9) - ema(closes[-9:], 9) * 0.1
     histogram = macd_line - signal_line
     
@@ -228,10 +232,7 @@ def calculate_volume_ratio(volumes: List[float], period: int = 20) -> float:
 
 
 def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
-    """
-    Multi-indicator analysis for a symbol.
-    Returns: (signal, confidence, reasoning, indicators)
-    """
+    """Multi-indicator analysis for a symbol."""
     candles = get_candles(symbol, 30)
     if len(candles) < 20:
         return "HOLD", 0.0, "Insufficient data", {}
@@ -242,7 +243,6 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
     except (IndexError, ValueError):
         return "HOLD", 0.0, "Data parse error", {}
     
-    # Calculate all indicators
     rsi = calculate_rsi(closes)
     macd_line, signal_line, macd_hist = calculate_macd(closes)
     momentum = calculate_momentum(closes)
@@ -255,7 +255,6 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
         "volume_ratio": round(vol_ratio, 2)
     }
     
-    # Score-based signal generation
     long_score = 0
     short_score = 0
     reasons = []
@@ -302,8 +301,7 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
             short_score += 1
         reasons.append(f"High volume ({vol_ratio:.1f}x)")
     
-    # Determine signal and confidence
-    max_score = 7  # Maximum possible score
+    max_score = 7
     
     if long_score > short_score and long_score >= 2:
         confidence = min(0.55 + (long_score / max_score) * 0.35, 0.90)
@@ -322,7 +320,7 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
 
 
 # =============================================================================
-# TRADING LOGIC
+# CONCURRENT TRADING LOGIC
 # =============================================================================
 
 def log(msg: str):
@@ -330,13 +328,18 @@ def log(msg: str):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 
-def execute_trade(symbol: str, signal: str, confidence: float, reasoning: str):
-    """Execute a trade and manage the position"""
+def manage_position(symbol: str, signal: str, confidence: float, reasoning: str) -> Optional[float]:
+    """
+    Open a position and manage it until exit condition.
+    Runs in a separate thread for concurrent trading.
+    """
+    global open_positions
+    
     size = POSITION_SIZES.get(symbol, "0.001")
     price = get_price(symbol)
     coin = symbol.replace("cmt_", "").replace("usdt", "").upper()
     
-    log(f"🎯 {signal} {coin} @ ${price:,.2f} | Conf: {confidence:.0%}")
+    log(f"🎯 OPENING {signal} {coin} @ ${price:,.2f} | Size: {size} | Conf: {confidence:.0%}")
     log(f"   📊 {reasoning}")
     
     # Open position
@@ -344,24 +347,31 @@ def execute_trade(symbol: str, signal: str, confidence: float, reasoning: str):
     result = place_order(symbol, direction, size)
     
     if not result.get("order_id"):
-        log(f"   ❌ Order failed: {result}")
+        log(f"   ❌ {coin} Order failed: {result}")
+        with positions_lock:
+            if symbol in open_positions:
+                del open_positions[symbol]
         return None
     
     order_id = result.get("order_id")
-    log(f"   ✅ Opened: {order_id}")
+    log(f"   ✅ {coin} Opened: {order_id}")
     
     # Upload AI log
-    ai_result = upload_ai_log(order_id, symbol, signal, reasoning, confidence, price)
-    if ai_result.get("code") == "00000":
-        log(f"   📤 AI log uploaded")
+    upload_ai_log(order_id, symbol, signal, reasoning, confidence, price)
     
-    # Dynamic position management
+    # Track position
     entry_price = price
     start_time = time.time()
     
+    # Position management loop
     while (time.time() - start_time) < MAX_HOLD_TIME:
-        time.sleep(3)  # Check every 3 seconds
+        time.sleep(5)  # Check every 5 seconds
         current_price = get_price(symbol)
+        
+        # Skip PnL check if price fetch failed
+        if current_price <= 0:
+            log(f"   ⚠️ {coin} Price fetch failed, skipping check...")
+            continue
         
         if signal == "LONG":
             pnl_pct = ((current_price - entry_price) / entry_price) * 100
@@ -370,21 +380,36 @@ def execute_trade(symbol: str, signal: str, confidence: float, reasoning: str):
         
         # Take profit
         if pnl_pct >= PROFIT_TARGET_PCT:
-            log(f"   💰 Taking profit: +{pnl_pct:.2f}%")
+            log(f"   💰 {coin} Taking profit: +{pnl_pct:.2f}%")
             break
         
         # Cut loss
         if pnl_pct <= -STOP_LOSS_PCT:
-            log(f"   🛑 Cutting loss: {pnl_pct:.2f}%")
+            log(f"   🛑 {coin} Cutting loss: {pnl_pct:.2f}%")
             break
     
-    # Close position
+    # Close position with retry logic
     close_direction = 3 if direction == 1 else 4
-    close_result = place_order(symbol, close_direction, size)
+    close_result = None
+    max_close_attempts = 3
     
-    if close_result.get("order_id"):
+    for attempt in range(max_close_attempts):
+        close_result = place_order(symbol, close_direction, size)
+        if close_result.get("order_id"):
+            break
+        log(f"   ⚠️ {coin} Close attempt {attempt + 1}/{max_close_attempts} failed: {close_result}")
+        if attempt < max_close_attempts - 1:
+            time.sleep(2)  # Wait before retry
+    
+    final_pnl = None
+    if close_result and close_result.get("order_id"):
         close_id = close_result.get("order_id")
         final_price = get_price(symbol)
+        
+        # Use entry price as fallback if final price fetch fails
+        if final_price <= 0:
+            final_price = entry_price
+            log(f"   ⚠️ {coin} Final price fetch failed, using entry price for P&L calculation")
         
         if signal == "LONG":
             final_pnl = ((final_price - entry_price) / entry_price) * 100
@@ -392,37 +417,58 @@ def execute_trade(symbol: str, signal: str, confidence: float, reasoning: str):
             final_pnl = ((entry_price - final_price) / entry_price) * 100
         
         emoji = "✅" if final_pnl > 0 else "❌"
-        log(f"   {emoji} Closed: {close_id} | P&L: {final_pnl:+.2f}%")
+        log(f"   {emoji} {coin} Closed: P&L: {final_pnl:+.2f}%")
         
-        # Upload close AI log
         upload_ai_log(close_id, symbol, f"CLOSE_{signal}", f"Position closed with {final_pnl:+.2f}% P&L", 0.8, final_price)
-        
-        return final_pnl
+    else:
+        # CRITICAL: Close order failed after all retries
+        log(f"   ❌❌ {coin} CRITICAL: Position close FAILED after {max_close_attempts} attempts!")
+        log(f"   ❌❌ {coin} Position may still be OPEN on exchange! Manual intervention required.")
+        log(f"   ❌❌ {coin} Details: Direction={signal}, Size={size}, Entry=${entry_price:,.2f}")
     
-    return None
+    # Remove from tracking
+    with positions_lock:
+        if symbol in open_positions:
+            del open_positions[symbol]
+    
+    return final_pnl
 
 
-def run_aggressive_trading():
-    """Main trading loop"""
-    log("=" * 60)
-    log("🚀 AGGRESSIVE AI TRADER - COMPETITION MODE")
-    log("=" * 60)
-    log(f"💰 Starting Balance: Check with balance script")
-    log(f"⚡ Position Size: ~$80-100 per trade")
-    log(f"🎯 Confidence Threshold: {MIN_CONFIDENCE:.0%}")
-    log(f"⏱️  Trade Interval: {MIN_TRADE_INTERVAL}s")
-    log(f"📊 Max Daily Trades: {MAX_DAILY_TRADES}")
-    log("=" * 60)
+def run_multi_position_trading():
+    """Main trading loop with CONCURRENT multi-position support"""
+    global open_positions
+    
+    log("=" * 70)
+    log("🚀 MULTI-POSITION AI TRADER - MAXIMUM AGGRESSION")
+    log("=" * 70)
+    log(f"💰 Position Size: ~$150 per trade")
+    log(f"🎯 Profit Target: {PROFIT_TARGET_PCT}% | Stop Loss: {STOP_LOSS_PCT}%")
+    log(f"📈 Max Concurrent Positions: {MAX_CONCURRENT_POSITIONS}")
+    log(f"⏱️  Scan Interval: {MIN_TRADE_INTERVAL}s")
+    log("=" * 70)
     
     balance = get_balance()
     log(f"💰 Current Balance: ${balance:.2f}")
     
     daily_trades = 0
     total_pnl = 0
-    last_trade_time = 0
+    executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_POSITIONS)
+    futures = {}
     
     while True:
         try:
+            # Check completed trades
+            completed = [sym for sym, fut in futures.items() if fut.done()]
+            for sym in completed:
+                try:
+                    pnl = futures[sym].result()
+                    if pnl is not None:
+                        total_pnl += pnl
+                        daily_trades += 2
+                except Exception as e:
+                    log(f"⚠️ Trade error for {sym}: {e}")
+                del futures[sym]
+            
             # Check balance
             current_balance = get_balance()
             pnl_pct = ((current_balance - STARTING_BALANCE) / STARTING_BALANCE) * 100
@@ -432,55 +478,58 @@ def run_aggressive_trading():
                 log(f"⚠️ DRAWDOWN LIMIT: {pnl_pct:.1f}%. Stopping.")
                 break
             
-            # Daily trade limit
-            if daily_trades >= MAX_DAILY_TRADES:
-                log(f"📊 Daily limit reached ({MAX_DAILY_TRADES}). Waiting...")
-                time.sleep(3600)
-                daily_trades = 0
-                continue
+            # Count open positions
+            with positions_lock:
+                current_positions = len(open_positions)
             
-            # Rate limiting
-            elapsed = time.time() - last_trade_time
-            if elapsed < MIN_TRADE_INTERVAL:
-                time.sleep(MIN_TRADE_INTERVAL - elapsed)
+            available_slots = MAX_CONCURRENT_POSITIONS - current_positions
             
-            # Scan all symbols for opportunities
-            log(f"🔍 Scanning {len(SYMBOLS)} symbols... (Balance: ${current_balance:.2f}, P&L: {pnl_pct:+.1f}%)")
-            
-            opportunities = []
-            for symbol in SYMBOLS:
-                signal, confidence, reasoning, indicators = analyze_symbol(symbol)
-                if signal != "HOLD" and confidence >= MIN_CONFIDENCE:
-                    opportunities.append({
-                        "symbol": symbol,
-                        "signal": signal,
-                        "confidence": confidence,
-                        "reasoning": reasoning,
-                        "indicators": indicators
-                    })
-            
-            # Sort by confidence and take the best
-            opportunities.sort(key=lambda x: x["confidence"], reverse=True)
-            
-            if opportunities:
-                best = opportunities[0]
-                log(f"📈 Found {len(opportunities)} opportunities. Best: {best['symbol']}")
+            if available_slots > 0:
+                log(f"🔍 Scanning... Balance: ${current_balance:.2f} | Open: {current_positions}/{MAX_CONCURRENT_POSITIONS} | P&L: {pnl_pct:+.1f}%")
                 
-                pnl = execute_trade(
-                    best["symbol"],
-                    best["signal"],
-                    best["confidence"],
-                    best["reasoning"]
-                )
-                
-                if pnl is not None:
-                    daily_trades += 2  # Open + close
-                    total_pnl += pnl
-                    last_trade_time = time.time()
+                # Find opportunities for symbols not already in a position
+                opportunities = []
+                for symbol in SYMBOLS:
+                    with positions_lock:
+                        if symbol in open_positions:
+                            continue
                     
-                    log(f"📊 Session: {daily_trades} trades, Total P&L: {total_pnl:+.2f}%")
+                    signal, confidence, reasoning, indicators = analyze_symbol(symbol)
+                    if signal != "HOLD" and confidence >= MIN_CONFIDENCE:
+                        opportunities.append({
+                            "symbol": symbol,
+                            "signal": signal,
+                            "confidence": confidence,
+                            "reasoning": reasoning
+                        })
+                
+                # Sort by confidence
+                opportunities.sort(key=lambda x: x["confidence"], reverse=True)
+                
+                # Open positions for top opportunities
+                for opp in opportunities[:available_slots]:
+                    symbol = opp["symbol"]
+                    
+                    with positions_lock:
+                        if symbol in open_positions:
+                            continue
+                        open_positions[symbol] = True
+                    
+                    # Submit trade to thread pool
+                    future = executor.submit(
+                        manage_position,
+                        symbol,
+                        opp["signal"],
+                        opp["confidence"],
+                        opp["reasoning"]
+                    )
+                    futures[symbol] = future
+                    daily_trades += 1
+                
+                if not opportunities:
+                    log(f"   No new signals (already have {current_positions} positions)")
             else:
-                log(f"   No signals above {MIN_CONFIDENCE:.0%} threshold")
+                log(f"📊 All {MAX_CONCURRENT_POSITIONS} slots filled. Waiting...")
             
             time.sleep(MIN_TRADE_INTERVAL)
             
@@ -491,32 +540,36 @@ def run_aggressive_trading():
             log(f"❌ Error: {e}")
             time.sleep(10)
     
+    # Wait for all threads to complete
+    log("⏳ Waiting for open positions to close...")
+    executor.shutdown(wait=True)
+    
     # Final summary
     final_balance = get_balance()
-    log("=" * 60)
+    log("=" * 70)
     log("📊 SESSION SUMMARY")
     log(f"   Final Balance: ${final_balance:.2f}")
     log(f"   Total Trades: {daily_trades}")
     log(f"   Session P&L: {total_pnl:+.2f}%")
-    log("=" * 60)
+    log("=" * 70)
 
 
 if __name__ == "__main__":
     print("""
     ╔══════════════════════════════════════════════════════════════════╗
-    ║  🚀 AGGRESSIVE AI TRADER - WEEX COMPETITION                      ║
+    ║  🚀 MULTI-POSITION AI TRADER - WEEX COMPETITION                  ║
     ╠══════════════════════════════════════════════════════════════════╣
     ║  Features:                                                       ║
-    ║  • Multi-indicator analysis (RSI + MACD + Volume + Momentum)     ║
-    ║  • Large positions (~$80-100 per trade)                          ║
-    ║  • Dynamic profit-taking at 0.5% / stop-loss at 0.4%             ║
-    ║  • Fast 15-second scan intervals                                 ║
+    ║  • CONCURRENT trading on multiple symbols at once                ║
+    ║  • ULTRA LARGE positions (~$150 per trade)                       ║
+    ║  • Up to 5 positions simultaneously                              ║
+    ║  • Dynamic profit-taking at 1.5% / stop-loss at 1.0%             ║
     ║  • AI log upload for every trade                                 ║
     ╚══════════════════════════════════════════════════════════════════╝
     """)
     
-    confirm = input("Start AGGRESSIVE trading? (yes/no): ").strip().lower()
+    confirm = input("Start MULTI-POSITION trading? (yes/no): ").strip().lower()
     if confirm == "yes":
-        run_aggressive_trading()
+        run_multi_position_trading()
     else:
         print("Cancelled.")
