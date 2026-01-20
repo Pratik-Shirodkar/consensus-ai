@@ -55,7 +55,7 @@ POSITION_SIZES = {
     "cmt_dogeusdt": "1000",     # ~$140
     "cmt_xrpusdt": "70",        # ~$140
     "cmt_adausdt": "350",       # ~$140
-    "cmt_bnbusdt": "0.15",      # ~$140
+    "cmt_bnbusdt": "0.2",       # ~$180 (stepSize: 0.1)
     "cmt_ltcusdt": "1.5",       # ~$120
 }
 
