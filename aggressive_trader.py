@@ -517,6 +517,10 @@ def run_god_mode():
             with positions_lock:
                 busy = len(open_positions)
             
+            # Get and show balance
+            balance = get_balance()
+            log(f"🔍 Scanning {len(SYMBOLS)} symbols... Balance: ${balance:.2f} | Open: {busy}/{MAX_CONCURRENT_POSITIONS}")
+            
             if busy < MAX_CONCURRENT_POSITIONS:
                 # Scan symbols
                 opportunities = []
@@ -527,6 +531,10 @@ def run_god_mode():
                     sig, conf, reas, _ = analyze_symbol_god_mode(s)
                     if sig != "HOLD" and conf >= MIN_CONFIDENCE:
                         opportunities.append((s, sig, conf, reas))
+                        log(f"   📊 {s}: {sig} ({conf:.0%}) - {reas[:50]}")
+                
+                if not opportunities:
+                    log(f"   ⏳ No high-conviction signals. Waiting for setup...")
                 
                 # Sort best first
                 opportunities.sort(key=lambda x: x[2], reverse=True)
