@@ -35,10 +35,10 @@ MIN_TRADE_INTERVAL = 10  # 10 seconds between scan cycles
 MAX_DAILY_TRADES = 500   # Very high volume
 MAX_DRAWDOWN_PCT = 50    # Accept higher drawdown for competition
 STARTING_BALANCE = 1000.0
-MIN_CONFIDENCE = 0.55    # Lower threshold = more trades
-PROFIT_TARGET_PCT = 1.5  # Take profit at 1.5% LEVERAGED return (not price move)
-STOP_LOSS_PCT = 1.0      # Cut losses at 1.0% LEVERAGED return
-MAX_HOLD_TIME = 900      # Maximum 15 minutes per trade
+MIN_CONFIDENCE = 0.65    # Higher threshold = better quality trades
+PROFIT_TARGET_PCT = 4.0  # Take profit at 4% LEVERAGED return (covers fees + profit)
+STOP_LOSS_PCT = 2.0      # Cut losses at 2% LEVERAGED return (avoids noise stops)
+MAX_HOLD_TIME = 1200     # Maximum 20 minutes per trade (more room to run)
 MAX_CONCURRENT_POSITIONS = 5  # Max positions at once
 
 # All tradeable symbols
@@ -259,17 +259,17 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
     short_score = 0
     reasons = []
     
-    # RSI signals (aggressive thresholds)
+    # RSI signals (tighter thresholds for quality signals)
     if rsi < 25:
         long_score += 3
         reasons.append(f"RSI very oversold ({rsi:.1f})")
-    elif rsi < 45:
+    elif rsi < 35:
         long_score += 2
         reasons.append(f"RSI oversold ({rsi:.1f})")
     elif rsi > 80:
         short_score += 3
         reasons.append(f"RSI very overbought ({rsi:.1f})")
-    elif rsi > 60:
+    elif rsi > 70:
         short_score += 2
         reasons.append(f"RSI overbought ({rsi:.1f})")
     
@@ -303,12 +303,12 @@ def analyze_symbol(symbol: str) -> Tuple[str, float, str, dict]:
     
     max_score = 7
     
-    if long_score > short_score and long_score >= 2:
-        confidence = min(0.55 + (long_score / max_score) * 0.35, 0.90)
+    if long_score > short_score and long_score >= 3:
+        confidence = min(0.60 + (long_score / max_score) * 0.30, 0.90)
         signal = "LONG"
         reasoning = " | ".join(reasons[:3])
-    elif short_score > long_score and short_score >= 2:
-        confidence = min(0.55 + (short_score / max_score) * 0.35, 0.90)
+    elif short_score > long_score and short_score >= 3:
+        confidence = min(0.60 + (short_score / max_score) * 0.30, 0.90)
         signal = "SHORT"
         reasoning = " | ".join(reasons[:3])
     else:
